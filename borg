@@ -1,0 +1,133 @@
+#!/usr/local/bin/python2
+from pykube.config import KubeConfig
+from pykube.http import HTTPClient
+from kube import Pod
+from kube import ReplicationController
+from kube import Service
+from kube import Etcd
+from kube import GFS
+import json
+import time
+import click
+
+kubeconfig = KubeConfig('kubeconfig')
+client = HTTPClient(kubeconfig)
+
+
+@click.group()
+def cli():
+    pass
+
+
+@click.command()
+def list_pod():
+    pods = json.loads(client.get(url="pods").content)
+    click.echo(pods)
+
+
+@click.command()
+@click.option('--name', help='runtime env name')
+def re_delete(name):
+    rc = ReplicationController()
+    service = Service()
+    etcd_handle = Etcd()
+    pod = Pod()
+    click.echo(pod.delete_pod(name))
+    click.echo(rc.delete_replication_controller(name))
+    click.echo(service.delete_service(name))
+    click.echo(etcd_handle.del_web_app(name, 'default'))
+
+
+@click.command()
+@click.option('--name', help='runtime env name')
+@click.option('--replicas', default=1, help='number of replicas')
+def re_create(name, replicas):
+    """
+    :param name: runtime env name
+    :param replicas: number of replicas
+    :return: status of create runtime env
+    """
+    rc = ReplicationController()
+    service = Service()
+    etcd_handle = Etcd()
+    gfs_handle = GFS()
+    try:
+        gfs_handle.create_dir(name)
+    except OSError:
+        print("{}exist".format(name))
+    rc_create_result = rc.create_replication_controller(name, replicas)
+    svc_create_result = service.create_service(name)
+    if rc_create_result['status'] == 'Failure' and svc_create_result[
+            'status'] == 'Failure':
+        click.echo("create Failure")
+        click.echo(rc_create_result['reason'])
+        click.echo(svc_create_result['reason'])
+    else:
+        pod = Pod()
+        attempts = 0
+        ssh_port = http_port = https_port = host_ip = phase = ""
+        #       retry to wait host_IP value
+        while attempts < 32:
+            pod_info = pod.pod_view(name)
+            if pod_info and 'hostIP' in pod_info['status']:
+                host_ip = pod_info['status']['hostIP']
+                phase = pod_info['status']['phase']
+                break
+            else:
+                time.sleep(1)
+                attempts += 1
+        service_info = service.view_service(name)
+        ports = service_info['spec']['ports']
+        for port in ports:
+            if port['name'] == 'ssh':
+                ssh_port = port['nodePort']
+            elif port['name'] == 'http':
+                http_port = port['nodePort']
+            elif port['name'] == 'https':
+                https_port = port['nodePort']
+        etcd_handle.add_web_app(name, "default", http_port, https_port,
+                                host_ip)
+        click.echo("host_IP={}".format(host_ip))
+        click.echo("phase={}".format(phase))
+        click.echo("ssh_port={},http_port={},https_port={}".format(
+            ssh_port, http_port, https_port))
+
+
+@click.command()
+@click.option('--name', help='runtime env name')
+def re_view(name):
+    ssh_port = ""
+    pod = Pod()
+    service = Service()
+    pod_info = pod.pod_view(name)
+    service_info = service.view_service(name)
+    result = dict()
+    if pod_info:
+        host_ip = pod_info['status']['hostIP']
+        phase = pod_info['status']['phase']
+        ports = service_info['spec']['ports']
+        for port in ports:
+            if port['name'] == 'ssh':
+                ssh_port = port['nodePort']
+        result['status'] = "sucess"
+        result['host_ip'] = host_ip
+        result['ssh_port'] = ssh_port
+        result['phase'] = phase
+        click.echo(json.dumps(result))
+    else:
+        result['status'] = "fail"
+        click.echo(json.dumps(result))
+
+
+@click.command()
+def re_rebuild():
+    pass
+
+
+if __name__ == '__main__':
+    cli.add_command(list_pod)
+    cli.add_command(re_create)
+    cli.add_command(re_view)
+    cli.add_command(re_rebuild)
+    cli.add_command(re_delete)
+    cli()
