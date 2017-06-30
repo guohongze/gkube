@@ -128,7 +128,7 @@ class Service(object):
 class Etcd(object):
     def __init__(self):
         self.namespace = "default"
-        self.etcd_client = etcd.Client(host='172.21.133.1', port=4001)
+        self.etcd_client = etcd.Client(host='192.168.47.151', port=2379)
 
     def add_web_app(self, name, namespace, http_port, https_port, host_ip):
         domain = "{}.ctest.baijiahulian.com {}.ctest.genshuixue.com".format(
@@ -148,7 +148,7 @@ class Etcd(object):
 
 class GFS(object):
     def __init__(self):
-        self.volume = gfapi.Volume("172.21.133.1", "gv0")
+        self.volume = gfapi.Volume("192.168.47.151", "gv0")
         self.volume.mount()
 
     def create_dir(self, name):

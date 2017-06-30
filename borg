@@ -1,4 +1,4 @@
-#!/usr/local/bin/python2
+#!/usr/bin/python
 from pykube.config import KubeConfig
 from pykube.http import HTTPClient
 from kube import Pod
@@ -22,7 +22,19 @@ def cli():
 @click.command()
 def list_pod():
     pods = json.loads(client.get(url="pods").content)
-    click.echo(pods)
+    print "--------------------------------------------------------"
+    print "  pod_name                              namespace      "
+    print "--------------------------------------------------------"
+    str1 = ""
+    strlen = 40
+    for item in pods['items']:
+        str1 =  item['metadata']['name']
+        str2 = item['metadata']['namespace']
+        while (len(str1) < strlen):
+            str1 = str1+" "
+        print ""+str1+str2
+    print "--------------------------------------------------------"
+    #click.echo(pods)
 
 
 @click.command()
@@ -97,6 +109,8 @@ def re_create(name, replicas):
 @click.option('--name', help='runtime env name')
 def re_view(name):
     ssh_port = ""
+    http_port = ""
+    https_port = ""
     pod = Pod()
     service = Service()
     pod_info = pod.pod_view(name)
@@ -109,9 +123,15 @@ def re_view(name):
         for port in ports:
             if port['name'] == 'ssh':
                 ssh_port = port['nodePort']
+            elif port['name'] == 'http':
+                http_port = port['nodePort']
+            elif port['name'] == 'https':
+                https_port = port['nodePort']
         result['status'] = "sucess"
         result['host_ip'] = host_ip
         result['ssh_port'] = ssh_port
+        result['http_port'] = http_port
+        result['https_port'] = https_port
         result['phase'] = phase
         click.echo(json.dumps(result))
     else:
